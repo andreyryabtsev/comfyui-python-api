@@ -1,4 +1,4 @@
-"""End-to-end example for creating """
+"""End-to-end example for creating an image with SDXL base + refiner"""
 
 import argparse
 import io
@@ -31,7 +31,7 @@ async def run_base_and_refiner(address: str, user_string: str, output_path=None)
     prompt["10"]["inputs"]["end_at_step"] = parsed.result.base_steps
     prompt["11"]["inputs"]["start_at_step"] = parsed.result.base_steps
     prompt["10"]["inputs"]["steps"] = parsed.result.base_steps + parsed.result.refiner_steps
-    prompt["10"]["inputs"]["noise_steps"] = parsed.result.seed
+    prompt["10"]["inputs"]["noise_seed"] = parsed.result.seed
     prompt["11"]["inputs"]["steps"] = parsed.result.base_steps + parsed.result.refiner_steps
 
     # Prepare result dictionary.
