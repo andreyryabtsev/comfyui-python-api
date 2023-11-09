@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comfyui_utils"
-version = "0.0.0"
+version = "0.0.1"
 description = "Utilities for working with the ComfyUI API."
 readme = "README.md"
 authors = [{ name = "Andrey Ryabtsev", email = "ryabtsev.code@gmail.com" }]
