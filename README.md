@@ -12,7 +12,7 @@ Limitations:
 
 ## Example.
 
-To test the library with a sample SDXL workflow, clone this repository and run (replacing the address):
+To test the library with a sample SDXL workflow, clone this repository and run the following (replacing the address). Make sure your ComfyUI has `sd_xl_base_1.0.safetensors` and `sd_xl_refiner_1.0.safetensors` installed (or replace the workflow).
 
 ```
 pip install -e .
