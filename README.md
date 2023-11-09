@@ -10,6 +10,12 @@ Limitations:
 - Only integer arguments are currently supported in addition to the prompt itself. The plan is to add at least floats and strings.
 - Only one output from the workflow is supported.
 
+Supports:
+- Arbitrary number of integer args embedded in the main string prompt.
+- Queuing with a callback when the queue position changes.
+- Fetching cached results.
+- Reporting intermediate progress of nodes like `KSampler`.
+
 
 ## Install
 
@@ -40,7 +46,7 @@ await comfyui.fetch(backend_filepath, on_load)
 
 ## Example
 
-To test the library with a sample SDXL workflow, clone this repository and run the following (replacing the address). Make sure your ComfyUI has `sd_xl_base_1.0.safetensors` and `sd_xl_refiner_1.0.safetensors` installed (or replace the workflow).
+To test the library with a sample SDXL workflow, run the following after installing (replace the address with your ComfyUI endpoint). Make sure your ComfyUI has `sd_xl_base_1.0.safetensors` and `sd_xl_refiner_1.0.safetensors` installed (or replace the workflow).
 
 ```python
 comfy_ui_example_e2e\
