@@ -1,7 +1,7 @@
 import re
 import pytest
 
-import gen_prompts
+from comfyui_utils import gen_prompts
 
 def test_runs_at_all():
     assert gen_prompts.parse_args("wow",  gen_prompts.make_config("TestConfig", []))
