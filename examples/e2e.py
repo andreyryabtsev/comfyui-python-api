@@ -73,11 +73,12 @@ async def run_base_and_refiner(address: str, user_string: str, output_path=None)
 
 def main():
     parser = argparse.ArgumentParser(description='Run an SDXL or other workflow on a deployed ComfyUI server.')
-    parser.add_argument("--address", type=str, help="the ComfyUI endpoint")
-    parser.add_argument("--prompt", type=str, help="the user prompt")
+    parser.add_argument("--address", type=str, help="the ComfyUI endpoint", required=True)
+    parser.add_argument("--prompt", type=str, help="the user prompt", required=True)
     parser.add_argument("--output_path", type=str, help="the output path", default=None)
     args = parser.parse_args()
 
     asyncio.run(run_base_and_refiner(args.address, args.prompt, args.output_path))
 
-main()
+if __name__ == "__main__":
+    main()

@@ -10,13 +10,19 @@ Limitations:
 - Only integer arguments are currently supported in addition to the prompt itself. The plan is to add at least floats and strings.
 - Only one output from the workflow is supported.
 
+
+## Install
+
+```
+pip install comfyui_utils
+```
+
 ## Example.
 
 To test the library with a sample SDXL workflow, clone this repository and run the following (replacing the address). Make sure your ComfyUI has `sd_xl_base_1.0.safetensors` and `sd_xl_refiner_1.0.safetensors` installed (or replace the workflow).
 
 ```
-pip install -e .
-python examples/e2e.py\
+comfy_ui_example_e2e\
   --address='192.168.0.10:11010'\
   --prompt='a smiling potato $base_steps=8$refiner_steps=3'\
   --output='./potato.png'

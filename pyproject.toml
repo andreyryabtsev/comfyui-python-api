@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui_utils"
+version = "0.0.0"
+description = "Utilities for working with the ComfyUI API."
+readme = "README.md"
+authors = [{ name = "Andrey Ryabtsev", email = "ryabtsev.code@gmail.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["comfyui", "api"]
+dependencies = [
+    "aiohttp"
+]
+requires-python = ">=3.9"
+
+[project.urls]
+Homepage = "https://github.com/andreyryabtsev/comfyui_utils"
+
+[project.scripts]
+comfy_ui_example_e2e = "examples.e2e:main"
