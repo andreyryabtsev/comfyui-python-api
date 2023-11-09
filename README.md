@@ -17,11 +17,32 @@ Limitations:
 pip install comfyui_utils
 ```
 
-## Example.
+## Usage
+
+(better docs are coming, for now please look at the source code / sample script)
+
+```
+from comfyui_utils import gen_prompts, comfy
+gen_prompts.make_config("GenVid", [gen_prompts.IntArg("num_steps", default_value=12, min_value=1, max_value=80)])
+...
+try:
+    parsed = gen_prompts.parse_args(raw_prompt, prompt_config)
+except ValueError as e:
+    print(f"Invalid prompt {e.args[0]}")
+prompt_data = ...
+class Callbacks(comfy.Callbacks):
+    ...
+await comfyui.submit(prompt_data, Callbacks())
+def on_load(data_buffer):
+    ...
+await comfyui.fetch(backend_filepath, on_load)
+```
+
+## Example
 
 To test the library with a sample SDXL workflow, clone this repository and run the following (replacing the address). Make sure your ComfyUI has `sd_xl_base_1.0.safetensors` and `sd_xl_refiner_1.0.safetensors` installed (or replace the workflow).
 
-```
+```python
 comfy_ui_example_e2e\
   --address='192.168.0.10:11010'\
   --prompt='a smiling potato $base_steps=8$refiner_steps=3'\
@@ -51,6 +72,6 @@ Result (cached: no):
 ```
 The file will be saved in the root directory.
 
-## Use your own workflow.
+## Use your own workflow
 
 After finalizing the workflow, use the "Save (API format)" button to store the workflow. Then, edit the `PromptConfig` in the script to reflect the arguments you wish to make available, and ensure the prompt has them replaced after parsing.
