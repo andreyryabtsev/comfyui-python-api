@@ -1,4 +1,17 @@
-"""End-to-end example for creating an image with SDXL base + refiner"""
+import logging
+import sys
+
+formatter = logging.Formatter('%(asctime)s [%(levelname)-9s][%(name)-20s] %(message)s')
+sh= logging.StreamHandler(stream=sys.stdout)
+sh.setLevel(logging.DEBUG)
+sh.setFormatter(formatter)
+helper_logger= logging.root
+helper_logger.addHandler(sh)
+helper_logger.setLevel(logging.INFO)
+logger= helper_logger.getChild(__name__)
+
+import pathlib
+import tempfile
 
 import argparse
 import io
@@ -6,8 +19,9 @@ import asyncio
 import json
 from comfyui_utils import comfy
 from comfyui_utils import gen_prompts
+from PIL.Image import Image
 
-async def run_base_and_refiner(address: str, user_string: str, output_path=None):
+async def run_base_and_refiner(address: str, user_string: str, output_path: pathlib.Path=None, preview_dir: pathlib.Path=None):
     comfyui = comfy.ComfyAPI(address)
 
     # Load the stored API format prompt.
@@ -25,7 +39,7 @@ async def run_base_and_refiner(address: str, user_string: str, output_path=None)
     # Returns a list of warnings if any argument is invalid.
     parsed = gen_prompts.parse_args(user_string, prompt_config)
     for warning in parsed.warnings:
-        print(f"WARNING: {warning}")
+        logger.warning(warning)
     # Adjust the prompt with user args.
     prompt["6"]["inputs"]["text"] = parsed.cleaned
     prompt["10"]["inputs"]["end_at_step"] = parsed.result.base_steps
@@ -41,26 +55,46 @@ async def run_base_and_refiner(address: str, user_string: str, output_path=None)
     }
     # Configure the callbacks which will write to it during execution while printing updates.
     class Callbacks(comfy.Callbacks):
+        def __init__(self):
+            self.preview_count=0
+            self.preview_prefix= None
+            if preview_dir is not None:
+                preview_file_name= None
+                while preview_file_name is None or pathlib.Path(preview_file_name).exists():
+                    preview_file_name= pathlib.Path(tempfile.mktemp('.png', 'prompt_preview_', preview_dir))
+                self.preview_prefix= preview_file_name.stem
         async def queue_position(self, position):
-            print(f"Queue position: #{position}")
+            logger.info(f"Queue position: #{position}")
         async def in_progress(self, node_id, progress, total):
             progress = f"{progress}/{total}" if total else None
             if node_id == 10:
-                print(f"Base: {progress}" if progress else "Base...")
+                logger.info(f"Base: {progress}" if progress else "Base...")
             if node_id == 11:
-                print(f"Refiner: {progress}" if progress else "Refiner...")
+                logger.info(f"Refiner: {progress}" if progress else "Refiner...")
             elif node_id == 17:
-                print("Decoding...")
+                logger.info("Decoding...")
             elif node_id == 19:
-                print("Saving image on backend...")
+                logger.info("Saving image on backend...")
         async def completed(self, outputs, cached):
             result["output"] = outputs
             result["cached"] = cached
+        async def image_received(self, image: Image):
+            if preview_dir is not None:
+                preview_file= None
+                while preview_file is None or preview_file.exists():
+                    preview_file= preview_dir.joinpath(f"{self.preview_prefix}_{self.preview_count:04d}.png")
+                    self.preview_count+= 1
+                logger.info("Save preview file : %s", preview_file.name)
+                image.save(preview_file)
 
     # Run the prompt and print the result.
-    print("Queuing workflow.")
-    await comfyui.submit(prompt, Callbacks())
-    print(f"Result (cached: {'yes' if result['cached'] else 'no'}):\n{result['output']}")
+    logger.info("Queuing workflow.")
+    try:
+        await comfyui.submit(prompt, Callbacks())
+    except ValueError as e:
+        logger.error("Error processing template: %s", e)
+        return
+    logger.info(f"Result (cached: {'yes' if result['cached'] else 'no'}): {result['output']}")
 
     # Write the result to a local file.
     if output_path is not None:
@@ -68,6 +102,7 @@ async def run_base_and_refiner(address: str, user_string: str, output_path=None)
         async def on_load(data_file : io.BytesIO):
             with open(output_path, "wb") as f:
                 f.write(data_file.getbuffer())
+        logger.info("Saving backend image %s to %s", backend_filepath.get("filename", None), output_path)
         await comfyui.fetch(backend_filepath, on_load)
 
 
@@ -75,10 +110,25 @@ def main():
     parser = argparse.ArgumentParser(description='Run an SDXL or other workflow on a deployed ComfyUI server.')
     parser.add_argument("--address", type=str, help="the ComfyUI endpoint", required=True)
     parser.add_argument("--prompt", type=str, help="the user prompt", required=True)
-    parser.add_argument("--output_path", type=str, help="the output path", default=None)
+    parser.add_argument("--output_path", type=pathlib.Path, help="The filename to store the final image received from ComfyUI", default=None)
+    parser.add_argument("--output_dir", type=pathlib.Path, help="A folder to store the final image received from ComfyUI, name will be prompt_RANDOM.png", default=None)
+    parser.add_argument("--preview_dir", type=pathlib.Path, help="Folder to store preview images received from ComfyUI, images names will be prompt_preview_RANDOM_COUNTER.png", default=None)
     args = parser.parse_args()
 
-    asyncio.run(run_base_and_refiner(args.address, args.prompt, args.output_path))
+    outfile=args.output_path
+    if outfile is None and args.output_dir is not None:
+        if not args.output_dir.is_dir():
+            logger.error("Argument --output_dir is %s but it's not a directory (full path resolved: %s)", args.output_dir, args.output_dir.resolve())
+            exit(1)
+        #Find a temporary name for the preview
+        while outfile is None or pathlib.Path(outfile).exists():
+            outfile= pathlib.Path(tempfile.mktemp('.png', 'prompt_', args.output_dir))
+        logger.debug("(%s) %r", type(outfile), outfile)
+    if args.preview_dir is not None and not args.preview_dir.is_dir():
+            logger.error("Argument --preview_dir is %s but it's not a directory (full path resolved: %s)", args.preview_dir, args.preview_dir.resolve())
+            exit(1)
+        
+    asyncio.run(run_base_and_refiner(args.address, args.prompt, outfile, args.preview_dir))
 
 if __name__ == "__main__":
     main()
