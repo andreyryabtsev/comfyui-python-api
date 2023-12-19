@@ -50,7 +50,7 @@ To test the library with a sample SDXL workflow, run the following after install
 
 Program options :
 
-```usage: e2e.py [-h] --address ADDRESS --prompt PROMPT [--output_path OUTPUT_PATH] [--output_dir OUTPUT_DIR] [--preview_dir PREVIEW_DIR]
+```usage: e2e.py [-h] --address ADDRESS --prompt PROMPT [--output_path OUTPUT_PATH] [--output_dir OUTPUT_DIR] [--sample_dir SAMPLE_DIR]
 
 Run an SDXL or other workflow on a deployed ComfyUI server.
 
@@ -62,8 +62,8 @@ options:
                         The filename to store the final image received from ComfyUI
   --output_dir OUTPUT_DIR
                         A folder to store the final image received from ComfyUI, name will be prompt_RANDOM.png
-  --preview_dir PREVIEW_DIR
-                        Folder to store preview images received from ComfyUI, images names will be prompt_preview_RANDOM_COUNTER.png
+  --sample_dir SAMPLE_DIR
+                        Folder to store sample images received from ComfyUI, images names will be prompt_sample_RANDOM_COUNTER.png
 ```
 Example:
 ```python
