@@ -10,11 +10,13 @@ import dataclasses
 import io
 import json
 import logging
-from typing import Any, Callable, Union
+from typing import Any, Callable, Union, Optional
 import uuid
-
+import struct
+from PIL import Image
+from io import BytesIO
 import aiohttp
-
+import aiohttp.client_exceptions
 
 # Inherit this class to specify callbacks during prompt execution.
 class Callbacks(abc.ABC):
@@ -27,6 +29,9 @@ class Callbacks(abc.ABC):
     @abc.abstractmethod
     async def completed(self, outputs: dict[str, Any], cached: bool):
         """Called when the prompt completes, with the final output."""
+    @abc.abstractmethod
+    async def image_received(self, image: Image.Image):
+        """Called when the prompt's queue return a sampler image, a pillow image object is pass to this function"""
 
 
 StrDict = dict[str, Any]  # parsed JSON of an API-formatted ComfyUI workflow.
@@ -88,33 +93,69 @@ async def _prompt_websocket(sess: PromptSession, callbacks: Callbacks) -> None:
             # logging.warning(msg)
             if msg.type == aiohttp.WSMsgType.ERROR:
                 raise BrokenPipeError(f"WebSocket error: {msg.data}")
-            assert msg.type == aiohttp.WSMsgType.TEXT
-            message = json.loads(msg.data)
-            # Handle prompt being started.
-            if message["type"] == "status":
-                queue_or_result = await _get_queue_position_or_cached_result(sess)
-                if isinstance(queue_or_result, int):
-                    await callbacks.queue_position(queue_or_result)
-                else:
-                    await callbacks.completed(queue_or_result, True)
+            if msg.type == aiohttp.WSMsgType.TEXT:
+                message = json.loads(msg.data)
+                # Handle prompt being started.
+                if message["type"] == "status":
+                    queue_or_result = await _get_queue_position_or_cached_result(sess)
+                    if isinstance(queue_or_result, int):
+                        await callbacks.queue_position(queue_or_result)
+                    else:
+                        await callbacks.completed(queue_or_result, True)
+                        break
+                # Handle a node being executed.
+                if message["type"] == "executing":
+                    if message["data"]["node"] is not None:
+                        node_id = int(message["data"]["node"])
+                        current_node = node_id
+                        await callbacks.in_progress(current_node, 0, 0)
+                # Handle completion of the request.
+                if message["type"] == "executed":
+                    assert message["data"]["prompt_id"] == sess.prompt_id
+                    await callbacks.completed(message["data"]["output"], False)
                     break
-            # Handle a node being executed.
-            if message["type"] == "executing":
-                if message["data"]["node"] is not None:
-                    node_id = int(message["data"]["node"])
-                    current_node = node_id
-                    await callbacks.in_progress(current_node, 0, 0)
-            # Handle completion of the request.
-            if message["type"] == "executed":
-                assert message["data"]["prompt_id"] == sess.prompt_id
-                await callbacks.completed(message["data"]["output"], False)
-                break
-            # Handle progress on a node.
-            if message["type"] == "progress":
-                progress = int(message["data"]["value"])
-                total = int(message["data"]["max"])
-                await callbacks.in_progress(current_node, progress, total)
+                # Handle progress on a node.
+                if message["type"] == "progress":
+                    progress = int(message["data"]["value"])
+                    total = int(message["data"]["max"])
+                    await callbacks.in_progress(current_node, progress, total)
+            elif msg.type == aiohttp.WSMsgType.BINARY:
+                image= await receive_image(msg.data)
+                if image is not None:
+                    await callbacks.image_received(image)
+            else:
+                logging.warning("Not text message, message type: %r", msg.type)            
 
+
+async def receive_image(image_data) -> Optional[Image.Image]:
+    '''
+    Reference : https://github.com/comfyanonymous/ComfyUI.git server.py function send_image
+    Rebuild an PIL Image from the data received on the websocket. Return None on any errors.
+    '''
+    try:
+        type_num, = struct.unpack_from('>I', image_data, 0)
+        event_type_num, = struct.unpack_from('>I', image_data, 4)
+        if type_num == 1:
+            image_type= "JPEG"
+        elif type_num == 2:
+            image_type= "PNG"
+        else:
+            logging.error("Unsuported type received : %d", type_num)
+            return None
+        
+        if event_type_num == 1:
+            event_type= "PREVIEW_IMAGE"
+        elif event_type_num == 2:
+            event_type= "UNENCODED_PREVIEW_IMAGE"
+        else:
+            event_type= f"UNKNOWN {event_type_num}"
+        logging.info(f"Received an {image_type} ({event_type})")
+        bytesIO = BytesIO(image_data[8:])
+        image= Image.open(bytesIO)
+        return image        
+    except Exception as e:
+        logging.exception("Error on receiving image.")
+    return None
 
 class ComfyAPI:
     def __init__(self, address):
@@ -138,18 +179,24 @@ class ComfyAPI:
         async with aiohttp.ClientSession() as session:
             # Enqueue and get prompt ID.
             async with session.post(f"http://{self.address}/prompt", data=init_data) as resp:
-                response_json = await resp.json()
-                logging.info(response_json)
-                if "error" in response_json:
-                    if "node_errors" not in response_json:
-                        raise ValueError(response_json["error"]["message"])
-                    errors = []
-                    for node_id, data in response_json["node_errors"].items():
-                        for node_error in data["errors"]:
-                            errors.append(f"Node {node_id}, {node_error['details']}: {node_error['message']}")
-                    raise ValueError("\n" + "\n".join(errors))
+                try:
+                    response_json = await resp.json()
+                    logging.info(response_json)
+                    if "error" in response_json:
+                        if "node_errors" not in response_json:
+                            raise ValueError(response_json["error"]["message"])
+                        errors = []
+                        for node_id, data in response_json["node_errors"].items():
+                            for node_error in data["errors"]:
+                                errors.append(f"Node {node_id}, {node_error['details']}: {node_error['message']}")
+                        raise ValueError("\n" + "\n".join(errors))
 
-                prompt_id = response_json['prompt_id']
+                    prompt_id = response_json['prompt_id']
+                except aiohttp.client_exceptions.ContentTypeError as e:
+                    text= await resp.text()
+                    logging.error("Error, unexpected response, not a json response. %s \nReceived : \n%s", e, text)
+                    raise ValueError("Not a JSON response : \n%s" % text)
+                    
             # Listen on a websocket until the prompt completes and invoke callbacks.
             await _prompt_websocket(PromptSession(
                 client_id=client_id,
